@@ -361,6 +361,21 @@ class TornadoFeatureExtractor:
                 return "CPU"
         return None
 
+    def cleanup(self, features_path: str):
+        """
+        Delete the features.json file after analysis is done.
+
+        Args:
+            features_path: Path to the features.json file
+        """
+        try:
+            if os.path.exists(features_path):
+                os.remove(features_path)
+            else:
+                print(f"⚠️ No features file to clean up at: {features_path}")
+        except Exception as e:
+            print(f"❌ Error cleaning up features file: {e}")
+
     def run_complete_analysis(self, example_class: str, input_size: int, features_dir) -> bool:
         """
         Run complete analysis: extract features, predict device, and compare.
@@ -509,7 +524,8 @@ class TornadoFeatureExtractor:
             print("1. Using a different device type")
             print("2. Checking if the ML models were trained on this system")
             print("3. Re-training the models with current device configuration")
-        
+
+        self.cleanup(features_path)
         return True
 
 
