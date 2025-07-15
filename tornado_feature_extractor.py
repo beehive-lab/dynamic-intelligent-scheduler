@@ -91,8 +91,8 @@ class TornadoFeatureExtractor:
         except Exception as e:
             print(f"❌ Error running TornadoVM: {e}")
             return False
-    
-    def get_available_devices(self) -> Dict[str, List[str]]:
+
+    def get_available_devices(self) -> Tuple[Dict[str, List[str]], Dict[str, List[str]]]:
         """
         Get available TornadoVM devices.
         
@@ -107,54 +107,65 @@ class TornadoFeatureExtractor:
             if result.returncode != 0:
                 print(f"❌ Failed to get devices: {result.stderr}")
                 return {}
-            
-            devices = self._parse_devices_output(result.stdout)
-            return devices
+
+            devices, device_ids = self._parse_devices_output(result.stdout)
+            return devices, device_ids
             
         except Exception as e:
             print(f"❌ Error getting devices: {e}")
             return {}
-    
-    def _parse_devices_output(self, output: str) -> Dict[str, List[str]]:
+
+    def _parse_devices_output(self, output: str) -> Tuple[Dict[str, List[str]], Dict[str, List[str]]]:
         """
         Parse the output of 'tornado --devices' command.
-        
-        Args:
-            output: Raw output from tornado --devices
-            
+
         Returns:
-            Dictionary mapping device types to device names
+            Tuple:
+                - devices: Dict mapping device types to device descriptions
+                - device_ids: Dict mapping device types to Tornado device IDs (e.g., '0:0')
         """
         devices = {
             'CPU': [],
             'GPU': [],
             'iGPU': []
         }
-        
-        lines = output.split('\n')
-        current_device = None
-        
+        device_ids = {
+            'CPU': [],
+            'GPU': [],
+            'iGPU': []
+        }
+
+        lines = output.splitlines()
+        current_id = None
+        current_block = []
+
         for line in lines:
             line = line.strip()
-            
-            # Look for device type indicators
-            if 'OPENCL' in line and 'NVIDIA' in line:
-                if 'GeForce' in line or 'RTX' in line or 'GTX' in line:
-                    devices['GPU'].append(line)
-                elif 'Intel' in line:
-                    devices['iGPU'].append(line)
-            elif 'CPU' in line and 'OpenCL' in line:
-                devices['CPU'].append(line)
-            elif 'CPU' in line and 'PTX' in line:
-                devices['CPU'].append(line)
-            elif 'Intel' in line and 'Core' in line:
-                devices['CPU'].append(line)
-            elif 'Intel' in line and 'Graphics' in line:
-                devices['iGPU'].append(line)
-            elif 'AMD' in line and 'Graphics' in line:
-                devices['iGPU'].append(line)
-        
-        return devices
+
+            # Check if this line starts a new device block
+            match = re.match(r'^Tornado device=(\d+:\d+)', line)
+            if match:
+                # Process the previous block
+                if current_id and current_block:
+                    dev_type = self._infer_device_type(current_block)
+                    if dev_type:
+                        devices[dev_type].append("\n".join(current_block))
+                        device_ids[dev_type].append(current_id)
+
+                # Start new device block
+                current_id = match.group(1)
+                current_block = [line]
+            elif line:
+                current_block.append(line)
+
+        # Process the final block
+        if current_id and current_block:
+            dev_type = self._infer_device_type(current_block)
+            if dev_type:
+                devices[dev_type].append("\n".join(current_block))
+                device_ids[dev_type].append(current_id)
+
+        return devices, device_ids
     
     def load_features_from_json(self, features_path: str) -> Optional[Dict]:
         """
@@ -336,6 +347,20 @@ class TornadoFeatureExtractor:
                 normalized[key] = v
         return normalized
 
+    def _infer_device_type(self, lines: List[str]) -> Optional[str]:
+        """
+        Infer device type based on description block lines.
+        """
+        for line in lines:
+            lower = line.lower()
+            if "nvidia" in lower or "cuda" in lower:
+                return "GPU"
+            elif "intel" in lower and "graphics" in lower:
+                return "iGPU"
+            elif "intel" in lower or "cpu" in lower:
+                return "CPU"
+        return None
+
     def run_complete_analysis(self, example_class: str, input_size: int, features_dir) -> bool:
         """
         Run complete analysis: extract features, predict device, and compare.
@@ -360,7 +385,7 @@ class TornadoFeatureExtractor:
         
         # Step 2: Get available devices
         print("\nStep 2: Getting available devices...")
-        available_devices = self.get_available_devices()
+        available_devices, device_ids = self.get_available_devices()
         if not available_devices:
             print("❌ Could not retrieve available devices")
             return False
@@ -438,8 +463,37 @@ class TornadoFeatureExtractor:
         is_available, message = self.compare_prediction_with_devices(predicted_device, available_devices)
         print(message)
         print()
+
+        # Step 6: Run with predicted device ID
+        print("Step 6: Running workload on predicted device...")
+        target_device_type = self.getDeviceFromDict(predicted_device)
+
+        device_id_list = device_ids.get(target_device_type, [])
+        if not device_id_list:
+            print(f"❌ No device ID found for predicted device type: {target_device_type}")
+        else:
+            device_id = device_id_list[0]  # Use first matching device ID
+            final_cmd = [
+                self.tornado_path,
+                "--threadInfo",
+                f'--jvm=-Ds0.t0.device={device_id}',
+                "-m", example_class,
+                str(input_size)
+            ]
+            print(f"Executing: {' '.join(final_cmd)}\n")
+            try:
+                result = subprocess.run(final_cmd, capture_output=True, text=True, timeout=300)
+                print(result.stdout)
+                #if result.stderr:
+                #    print(f"⚠️ stderr: {result.stderr}")
+                if result.returncode == 0:
+                    print("✅ Final execution completed successfully")
+                else:
+                    print(f"❌ Final execution failed with return code {result.returncode}")
+            except Exception as e:
+                print(f"❌ Failed to run final command: {e}")
         
-        # Step 6: Summary
+        # Step 7: Summary
         print("=" * 60)
         print("ANALYSIS SUMMARY")
         print("=" * 60)
