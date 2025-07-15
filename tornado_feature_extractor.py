@@ -144,6 +144,8 @@ class TornadoFeatureExtractor:
                 devices['CPU'].append(line)
             elif 'CPU' in line and 'PTX' in line:
                 devices['CPU'].append(line)
+            elif 'Intel' in line and 'Core' in line:
+                devices['CPU'].append(line)
             elif 'Intel' in line and 'Graphics' in line:
                 devices['iGPU'].append(line)
             elif 'AMD' in line and 'Graphics' in line:
