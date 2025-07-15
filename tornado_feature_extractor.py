@@ -41,21 +41,21 @@ class TornadoFeatureExtractor:
         self.tornado_path = tornado_path
         self.inference_engine = TornadoVMInferenceEngine(model_dir)
         
-    def run_tornado_with_features(self, example_class: str, input_size: int, features_dir) -> bool:
+    def run_tornado_with_features(self, example_class: str, input_size: int, features_json_file) -> bool:
         """
         Run TornadoVM with feature extraction enabled.
         
         Args:
             example_class: The TornadoVM example class to run
             input_size: Input size for the computation
-            features_dir: Directory where features.json will be saved
+            features_json_file: Json file in which code features will be saved
             
         Returns:
             True if successful, False otherwise
         """
         jvm_value = (
             "-Dtornado.feature.extraction=True "
-            f"-Dtornado.features.dump.dir={features_dir}"
+            f"-Dtornado.features.dump.dir={features_json_file}"
         )
         cmd = [
             self.tornado_path,
@@ -167,22 +167,22 @@ class TornadoFeatureExtractor:
 
         return devices, device_ids
     
-    def load_features_from_json(self, features_path: str) -> Optional[Dict]:
+    def load_features_from_json(self, features_json_file: str) -> Optional[Dict]:
         """
         Load features from the generated JSON file.
         
         Args:
-            features_path: Path to the features.json file
+            features_json_file: Json file in which code features will be saved
             
         Returns:
             Dictionary of features or None if failed
         """
         try:
-            with open(features_path, 'r') as f:
+            with open(features_json_file, 'r') as f:
                 features = json.load(f)
             return features
         except FileNotFoundError:
-            print(f"❌ Features file not found: {features_path}")
+            print(f"❌ Features file not found: {features_json_file}")
             return None
         except json.JSONDecodeError as e:
             print(f"❌ Invalid JSON in features file: {e}")
@@ -361,29 +361,29 @@ class TornadoFeatureExtractor:
                 return "CPU"
         return None
 
-    def cleanup(self, features_path: str):
+    def cleanup(self, features_json_file: str):
         """
         Delete the features.json file after analysis is done.
 
         Args:
-            features_path: Path to the features.json file
+            features_json_file: Json file in which code features will be saved
         """
         try:
-            if os.path.exists(features_path):
-                os.remove(features_path)
+            if os.path.exists(features_json_file):
+                os.remove(features_json_file)
             else:
-                print(f"⚠️ No features file to clean up at: {features_path}")
+                print(f"⚠️ No features file to clean up at: {features_json_file}")
         except Exception as e:
             print(f"❌ Error cleaning up features file: {e}")
 
-    def run_complete_analysis(self, example_class: str, input_size: int, features_dir) -> bool:
+    def run_complete_analysis(self, example_class: str, input_size: int, features_json_file) -> bool:
         """
         Run complete analysis: extract features, predict device, and compare.
         
         Args:
             example_class: The TornadoVM example class to run
             input_size: Input size for the computation
-            features_dir: Directory where features.json will be saved
+            features_json_file: Json file in which code features will be saved
             
         Returns:
             True if analysis completed successfully
@@ -395,7 +395,7 @@ class TornadoFeatureExtractor:
         
         # Step 1: Run TornadoVM with feature extraction
         print("Step 1: Extract code features of selected class with TornadoVM...")
-        if not self.run_tornado_with_features(example_class, input_size, features_dir):
+        if not self.run_tornado_with_features(example_class, input_size, features_json_file):
             return False
         
         # Step 2: Get available devices
@@ -415,8 +415,7 @@ class TornadoFeatureExtractor:
 
         # Step 3: Load features from JSON
         print("Step 3: Loading features from JSON...")
-        features_path = features_dir
-        features_json = self.load_features_from_json(features_path)
+        features_json = self.load_features_from_json(features_json_file)
         if features_json is None:
             print("✗ Failed to load features from JSON")
             return False
@@ -426,7 +425,7 @@ class TornadoFeatureExtractor:
         features_json[workload_name]["threads"] = str(input_size)
         # PATCH END
 
-        features_json = self.load_features_from_json(features_path)
+        features_json = self.load_features_from_json(features_json_file)
         if features_json is None:
             print("✗ Failed to load features from JSON")
             return False
@@ -525,7 +524,7 @@ class TornadoFeatureExtractor:
             print("2. Checking if the ML models were trained on this system")
             print("3. Re-training the models with current device configuration")
 
-        self.cleanup(features_path)
+        self.cleanup(features_json_file)
         return True
 
 
@@ -561,7 +560,7 @@ Examples:
     )
     
     parser.add_argument(
-        "-f", "--features-dir", 
+        "-f", "--features_json_file",
         default=os.path.join(os.environ["TORNADO_SDK"], "features.json"),
         help="File to dump extracted features features in JSON format (.json)"
     )
@@ -590,7 +589,7 @@ Examples:
     success = extractor.run_complete_analysis(
         example_class=args.example,
         input_size=args.size,
-        features_dir=args.features_dir
+        features_json_file=args.features_json_file
     )
     
     if success:
