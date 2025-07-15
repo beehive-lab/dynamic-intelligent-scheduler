@@ -42,7 +42,7 @@ class TornadoFeatureExtractor:
         self.inference_engine = TornadoVMInferenceEngine(model_dir)
         
     def run_tornado_with_features(self, example_class: str, input_size: int, 
-                                 features_dir: str = "/home/mikepapadim/manchester/TornadoVM/") -> bool:
+                                 features_dir: str = "/home/thanos/repositories/TANGO/TornadoVM-Inference/TornadoVM/") -> bool:
         """
         Run TornadoVM with feature extraction enabled.
         
@@ -56,8 +56,7 @@ class TornadoFeatureExtractor:
         """
         cmd = [
             self.tornado_path,
-            "--jvm=-Dtornado.feature.extraction=True",
-            f"-Dtornado.features.dump.dir={features_dir}",
+            "--jvm=\"-Dtornado.feature.extraction=True -Dtornado.features.dump.dir=/home/thanos/repositories/TANGO/TornadoVM-Inference/tango-ml-scheduler/features.json\"",
             "-m", example_class,
             str(input_size)
         ]
@@ -207,11 +206,19 @@ class TornadoFeatureExtractor:
         """
         if not available_devices:
             return False, "No devices available"
-        
-        # Check if predicted device type is available
-        if predicted_device in available_devices and available_devices[predicted_device]:
-            return True, f"✅ Predicted device '{predicted_device}' is available"
-        
+
+        # Map model output to available_devices keys
+        device_map = {
+            "cpu": "CPU",
+            "gpu": "GPU",
+            "igpu": "iGPU"
+        }
+        mapped_device = device_map.get(predicted_device.lower(), predicted_device)
+
+        # Check if mapped device type is available
+        if mapped_device in available_devices and available_devices[mapped_device]:
+            return True, f"✅ Predicted device '{mapped_device}' is available"
+
         # Check what devices are actually available
         available_types = [device_type for device_type, devices in available_devices.items() if devices]
         
@@ -222,9 +229,105 @@ class TornadoFeatureExtractor:
             return False, f"❌ Predicted '{predicted_device}' but only '{available_types[0]}' is available"
         else:
             return False, f"❌ Predicted '{predicted_device}' but available devices are: {', '.join(available_types)}"
-    
+
+    def normalize_features(self, features: dict) -> dict:
+        mapping = {
+            "Global Memory Loads": "global_memory_loads",
+            "Global Memory Stores": "global_memory_stores",
+            "Local Memory Loads": "local_memory_loads",
+            "Local Memory Stores": "local_memory_stores",
+            "Constant Memory Loads": "constant_memory_loads",
+            "Constant Memory Stores": "constant_memory_stores",
+            "Private Memory Loads": "private_memory_loads",
+            "Private Memory Stores": "private_memory_stores",
+            "Total Loops": "total_loops",
+            "Parallel Loops": "parallel_loops",
+            "If Statements": "if_statements",
+            "Switch Statements": "switch_statements",
+            "Switch Cases": "switch_cases",
+            "Cast Operations": "cast_operations",
+            "Vector Operations": "vector_operations",
+            "Total Integer Operations": "total_integer_operations",
+            "Total Float Operations": "total_float_operations",
+            "Single Precision Float Operations": "single_precision_float_operations",
+            "Double Precision Float Operations": "double_precision_float_operations",
+            "Binary Operations": "binary_operations",
+            "Boolean Operations": "boolean_operations",
+            "Float Math Functions": "float_math_functions",
+            "Integer Math Functions": "integer_math_functions",
+            "Integer Comparison": "integer_comparison",
+            "Float Comparison": "float_comparison",
+            "BACKEND": "backend",
+            "Device ID": "device_id",
+            "threads": "threads",
+            # Add more mappings as needed
+        }
+        BACKEND_MAP = {
+            "OPENCL": 0,
+            "PTX": 1,
+            "SPIRV": 2,
+        }
+        normalized = {}
+        for k, v in features.items():
+            # Defensive: skip None keys
+            if k is None:
+                continue
+            key = mapping.get(k, k)
+            if key is None:
+                continue
+            key = str(key).lower().replace(" ", "_")
+            # Special handling for backend
+            if key == "backend":
+                normalized[key] = BACKEND_MAP.get(str(v).upper(), -1)
+            # Device ID: robustly extract a numeric value
+            elif key == "device_id":
+                if v is None:
+                    normalized[key] = -1
+                elif isinstance(v, str):
+                    # Try to extract a number from the string (e.g., "0:2" -> 2)
+                    import re
+                    numbers = re.findall(r"\d+", v)
+                    if numbers:
+                        try:
+                            normalized[key] = int(numbers[-1])
+                        except Exception:
+                            normalized[key] = -1
+                    else:
+                        try:
+                            normalized[key] = int(v)
+                        except Exception:
+                            normalized[key] = -1
+                else:
+                    try:
+                        normalized[key] = int(v)
+                    except Exception:
+                        normalized[key] = -1
+            # Numeric features: convert to int if possible
+            elif key in [
+                "global_memory_loads", "global_memory_stores", "local_memory_loads", "local_memory_stores",
+                "constant_memory_loads", "constant_memory_stores", "private_memory_loads", "private_memory_stores",
+                "total_loops", "parallel_loops", "if_statements", "switch_statements", "switch_cases",
+                "cast_operations", "vector_operations", "total_integer_operations", "total_float_operations",
+                "single_precision_float_operations", "double_precision_float_operations", "binary_operations",
+                "boolean_operations", "float_math_functions", "integer_math_functions", "integer_comparison",
+                "float_comparison", "threads"
+            ]:
+                try:
+                    normalized[key] = int(v)
+                except Exception:
+                    try:
+                        normalized[key] = float(v)
+                    except Exception:
+                        normalized[key] = 0
+            # Device: keep as string or encode if your model expects it
+            elif key == "device":
+                normalized[key] = str(v) if v is not None else ""
+            else:
+                normalized[key] = v
+        return normalized
+
     def run_complete_analysis(self, example_class: str, input_size: int, 
-                             features_dir: str = "/home/mikepapadim/manchester/TornadoVM/") -> bool:
+                             features_dir: str = "/home/thanos/repositories/TANGO/TornadoVM-Inference/TornadoVM/") -> bool:
         """
         Run complete analysis: extract features, predict device, and compare.
         
@@ -261,21 +364,78 @@ class TornadoFeatureExtractor:
                     print(f"    - {device}")
         print()
         
+        # # Step 3: Load features from JSON
+        # print("Step 3: Loading features from JSON...")
+        # #features_path = os.path.join(features_dir)
+        # features_path = features_dir
+        # features = self.load_features_from_json(features_path)
+        # if not features:
+        #     return False
+        #
+        # print(f"✅ Features loaded successfully")
+        # print(f"   Input size: {features.get('threads', 'N/A')}")
+        # print(f"   Number of features: {len(features)}")
+        # print()
+
         # Step 3: Load features from JSON
         print("Step 3: Loading features from JSON...")
-        features_path = os.path.join(features_dir, "features.json")
-        features = self.load_features_from_json(features_path)
-        if not features:
+        # features_path = os.path.join(features_dir, "features.json")
+        features_path = features_dir
+        print("Path" + features_path)
+        features_json = self.load_features_from_json(features_path)
+        if features_json is None:
+            print("✗ Failed to load features from JSON")
             return False
-        
+
+        # PATCH START: Inject threads field
+        workload_name = list(features_json.keys())[0]
+        features_json[workload_name]["threads"] = str(input_size)
+        # PATCH END
+
+        features_json = self.load_features_from_json(features_path)
+        if features_json is None:
+            print("✗ Failed to load features from JSON")
+            return False
+
+        workload_name = list(features_json.keys())[0]
+        features = features_json[workload_name]
+        features["threads"] = str(input_size)
+
+        # Normalize the features dict, not the outer dict!
+        features = self.normalize_features(features)
+
         print(f"✅ Features loaded successfully")
         print(f"   Input size: {features.get('threads', 'N/A')}")
         print(f"   Number of features: {len(features)}")
         print()
-        
+
+        # After normalization
+        features = self.normalize_features(features)
+
+        # Only keep features required by the model
+        required_features = [
+            "threads",
+            "global_memory_loads",
+            "global_memory_stores",
+            "local_memory_loads",
+            "local_memory_stores",
+            "total_loops",
+            "parallel_loops",
+            "cast_operations",
+            "vector_operations",
+            "total_integer_operations"
+        ]
+        filtered_features = {k: features[k] for k in required_features if k in features}
+
+        # Now pass only filtered_features to the model
+        result = self.predict_device(filtered_features)
+        if isinstance(result, dict) and "predicted_device" in result:
+            predicted_device = result["predicted_device"]
+        else:
+            predicted_device = result
+
         # Step 4: Predict optimal device
         print("Step 4: Predicting optimal device...")
-        predicted_device = self.predict_device(features)
         print(f"✅ Predicted optimal device: {predicted_device}")
         print()
         
@@ -338,7 +498,7 @@ Examples:
     
     parser.add_argument(
         "-f", "--features-dir", 
-        default="/home/mikepapadim/manchester/TornadoVM/",
+        default="/home/thanos/repositories/TANGO/TornadoVM-Inference/TornadoVM/features.json",
         help="Directory where features.json will be saved"
     )
     
