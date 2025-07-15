@@ -41,8 +41,7 @@ class TornadoFeatureExtractor:
         self.tornado_path = tornado_path
         self.inference_engine = TornadoVMInferenceEngine(model_dir)
         
-    def run_tornado_with_features(self, example_class: str, input_size: int, 
-                                 features_dir: str = "/home/thanos/repositories/TANGO/TornadoVM-Inference/TornadoVM/") -> bool:
+    def run_tornado_with_features(self, example_class: str, input_size: int, features_dir) -> bool:
         """
         Run TornadoVM with feature extraction enabled.
         
@@ -54,11 +53,15 @@ class TornadoFeatureExtractor:
         Returns:
             True if successful, False otherwise
         """
+        jvm_value = (
+            "-Dtornado.feature.extraction=True "
+            f"-Dtornado.features.dump.dir={features_dir}"
+        )
         cmd = [
             self.tornado_path,
-            "--jvm=\"-Dtornado.feature.extraction=True -Dtornado.features.dump.dir=/home/thanos/repositories/TANGO/TornadoVM-Inference/tango-ml-scheduler/features.json\"",
+            "--jvm", jvm_value,
             "-m", example_class,
-            str(input_size)
+            str(input_size),
         ]
         
         print(f"Running TornadoVM command:")
@@ -328,8 +331,7 @@ class TornadoFeatureExtractor:
                 normalized[key] = v
         return normalized
 
-    def run_complete_analysis(self, example_class: str, input_size: int, 
-                             features_dir: str = "/home/thanos/repositories/TANGO/TornadoVM-Inference/TornadoVM/") -> bool:
+    def run_complete_analysis(self, example_class: str, input_size: int, features_dir) -> bool:
         """
         Run complete analysis: extract features, predict device, and compare.
         
@@ -500,8 +502,8 @@ Examples:
     
     parser.add_argument(
         "-f", "--features-dir", 
-        default="/home/thanos/repositories/TANGO/TornadoVM-Inference/TornadoVM/features.json",
-        help="Directory where features.json will be saved"
+        default=os.path.join(os.environ["TORNADO_SDK"], "features.json"),
+        help="File to dump extracted features features in JSON format (.json)"
     )
     
     parser.add_argument(
