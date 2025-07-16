@@ -21,7 +21,7 @@ from typing import Dict, List, Tuple, Optional
 
 # Import the inference engine
 try:
-    from inference_engine import TornadoVMInferenceEngine
+    from engine.inference_engine import TornadoVMInferenceEngine
 except ImportError as e:
     print(f"Error importing inference_engine: {e}")
     print("Please ensure inference_engine.py is in the same directory.")
@@ -388,9 +388,9 @@ class TornadoFeatureExtractor:
         Returns:
             True if analysis completed successfully
         """
-        print("=" * 60)
-        print("TornadoVM FEATURE EXTRACTION AND DEVICE ANALYSIS")
-        print("=" * 60)
+        print("=" * 62)
+        print("TornadoVM FEATURE EXTRACTION AND DYNAMIC INTELLIGENT EXECUTION")
+        print("=" * 62)
         print()
         
         # Step 1: Run TornadoVM with feature extraction
