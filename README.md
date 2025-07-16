@@ -75,5 +75,9 @@ It supports automatic device selection based on extracted features.
 - See [Developer Guide](DEVELOPER_GUIDE.md) for detailed CLI options, error handling, and integration info.
 - See [Inference Engine Guide](INFERENCE_GUIDE) for detailed information on the prediction system.
 
+## Acknowledgments
+
+This work is supported by UK Research and Innovation (UKRI) under the UK government’s Horizon Europe funding guarantee for grant number 10039107 [TANGO](https://tango-project.eu).
+
 ## License
 MIT
