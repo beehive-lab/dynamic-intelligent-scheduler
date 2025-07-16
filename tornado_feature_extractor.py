@@ -64,9 +64,9 @@ class TornadoFeatureExtractor:
             str(input_size),
         ]
         
-        print(f"Running TornadoVM command:")
-        print(f"{' '.join(cmd)}")
-        print()
+        #print(f"Running TornadoVM command:")
+        #print(f"{' '.join(cmd)}")
+        #print()
         
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
@@ -394,27 +394,27 @@ class TornadoFeatureExtractor:
         print()
         
         # Step 1: Run TornadoVM with feature extraction
-        print("Step 1: Extract code features of selected class with TornadoVM...")
+        print("👉 Step 1: Extract code features of selected class with TornadoVM...")
         if not self.run_tornado_with_features(example_class, input_size, features_json_file):
             return False
         
-        # Step 2: Get available devices
-        print("\nStep 2: Getting available devices...")
+        # Step 2: Detect available devices
+        print("\n👉 Step 2: Detecting available devices...")
         available_devices, device_ids = self.get_available_devices()
         if not available_devices:
             print("❌ Could not retrieve available devices")
             return False
-        
-        print("Detected hardware accelerator devices:")
+
         for device_type, devices in available_devices.items():
             if devices:
-                print(f"  {device_type}: {len(devices)} device(s)")
+                print(f"=== Detected {len(devices)} device(s) of {device_type} type ===")
                 for device in devices:
-                    print(f"    - {device}")
-        print()
+                    print(f"----------------------------------------------------------------------")
+                    print(f" {device}")
+                    print(f"----------------------------------------------------------------------")
 
         # Step 3: Load features from JSON
-        print("Step 3: Loading features from JSON...")
+        print("\n👉 Step 3: Loading features from JSON...")
         features_json = self.load_features_from_json(features_json_file)
         if features_json is None:
             print("✗ Failed to load features from JSON")
@@ -468,18 +468,16 @@ class TornadoFeatureExtractor:
             predicted_device = result
 
         # Step 4: Predict optimal device
-        print("Step 4: Predicting optimal device type...")
+        print("\n👉 Step 4: Predicting optimal device type...")
         print(f"✅ Predicted optimal device type: {self.getDeviceFromDict(predicted_device)}")
-        print()
         
         # Step 5: Compare prediction with available devices
-        print("Step 5: Comparing prediction with available devices...")
+        #print("\n👉 Step 5: Comparing prediction with available devices...")
         is_available, message = self.compare_prediction_with_devices(predicted_device, available_devices)
-        print(message)
-        print()
+        #print(message)
 
         # Step 6: Run with predicted device ID
-        print("Step 6: Running workload on predicted device...")
+        print("\n👉 Step 5: Running workload on predicted device...")
         target_device_type = self.getDeviceFromDict(predicted_device)
 
         device_id_list = device_ids.get(target_device_type, [])
