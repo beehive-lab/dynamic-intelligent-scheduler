@@ -9,8 +9,7 @@ class TornadoVMInferenceEngine:
     Inference engine for TornadoVM ML task scheduler.
     Predicts optimal hardware (CPU, iGPU, GPU) for computational tasks.
     """
-    
-    def __init__(self, model_dir: str = "./"):
+    def __init__(self, model_dir: str = "./", mode: str = "performance"):
         """
         Initialize the inference engine.
         
@@ -18,11 +17,18 @@ class TornadoVMInferenceEngine:
             model_dir: Directory containing the saved model files
         """
         self.model_dir = model_dir
-        
+        self.mode = mode.lower()
+
+        model_dir_selection = "Energy-Trained-Models" if self.mode == "energy" else "Performance-Trained-Models"
+
         # Load the three trained classifiers
-        self.classifier_1 = joblib.load(f"{model_dir}/IGPUvsCPU_final.joblib")
-        self.classifier_2 = joblib.load(f"{model_dir}/GPUvsCPU_final.joblib") 
-        self.classifier_3 = joblib.load(f"{model_dir}/GPUvsIGPU_final.joblib")
+        try:
+            self.classifier_1 = joblib.load(f"{model_dir}/{model_dir_selection}/IGPUvsCPU_final.joblib")
+            self.classifier_2 = joblib.load(f"{model_dir}/{model_dir_selection}/GPUvsCPU_final.joblib")
+            self.classifier_3 = joblib.load(f"{model_dir}/{model_dir_selection}/GPUvsIGPU_final.joblib")
+        except FileNotFoundError as e:
+            print(f"❌ Could not find model file: {e}")
+            raise
         
         # Load feature names
         with open(f"{model_dir}/Final Artifacts/features.txt", 'r') as f:
@@ -62,7 +68,7 @@ class TornadoVMInferenceEngine:
             "Vector Operations": "vector_operations",
             "Integer & Float Operations": "total_integer_operations"
         }
-    
+
     def parse_json_input(self, json_data: Dict) -> Dict[str, float]:
         """
         Parse JSON input format and convert to required feature format.

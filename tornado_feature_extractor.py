@@ -29,7 +29,7 @@ except ImportError as e:
 
 
 class TornadoFeatureExtractor:
-    def __init__(self, model_dir: str = ".", tornado_path: str = "tornado"):
+    def __init__(self, model_dir: str = ".", tornado_path: str = "tornado", mode: str = "performance"):
         """
         Initialize the feature extractor.
         
@@ -39,6 +39,7 @@ class TornadoFeatureExtractor:
         """
         self.model_dir = model_dir
         self.tornado_path = tornado_path
+        self.mode = mode
         self.inference_engine = TornadoVMInferenceEngine(model_dir)
 
     def run_tornado_with_features(self, truffle_args, example_class, input_size, features_json_file) -> Optional[int]:
@@ -74,9 +75,9 @@ class TornadoFeatureExtractor:
             if input_size is not None:
                 cmd.append(str(input_size))
 
-        print(f"Running TornadoVM command:")
-        print(f"{' '.join(cmd)}")
-        print()
+        #print(f"Running TornadoVM command:")
+        #print(f"{' '.join(cmd)}")
+        #print()
 
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
@@ -552,6 +553,7 @@ class TornadoFeatureExtractor:
         print("=" * 60)
         print("ANALYSIS SUMMARY")
         print("=" * 60)
+        print(f"Criterion to automatically select device: {self.mode.upper()}")
         print(f"Input size: {input_size}")
         if truffle_args:
             print(f"Truffle is used for language: {truffle_args[0]}")
@@ -581,7 +583,7 @@ def main():
         epilog="""
 Examples:
   python tornado_feature_extractor.py -e tornado.examples/uk.ac.manchester.tornado.examples.compute.MatrixMultiplication1D -s 512
-  python tornado_feature_extractor.py -e tornado.examples/uk.ac.manchester.tornado.examples.compute.MatrixMultiplication1D -s 1024 -m ./models
+  python tornado_feature_extractor.py -e tornado.examples/uk.ac.manchester.tornado.examples.compute.MatrixMultiplication1D -s 1024 --model-dir ./models
   python tornado_feature_extractor.py -e tornado.examples/uk.ac.manchester.tornado.examples.compute.MatrixMultiplication1D -s 256 -f /custom/features/path
         """
     )
@@ -599,7 +601,7 @@ Examples:
     )
 
     parser.add_argument(
-        "-m", "--model-dir", 
+        "--model-dir",
         default=".",
         help="Directory containing trained models (default: current directory)"
     )
@@ -628,13 +630,21 @@ Examples:
         action="store_true",
         help="Enable verbose output"
     )
+
+    parser.add_argument(
+        "--mode",
+        choices=["performance", "energy"],
+        default="performance",
+        help="Choose which ML model to use: 'performance' (default) or 'energy'"
+    )
     
     args = parser.parse_args()
     
     # Create feature extractor
     extractor = TornadoFeatureExtractor(
         model_dir=args.model_dir,
-        tornado_path=args.tornado_path
+        tornado_path=args.tornado_path,
+        mode=args.mode
     )
 
     if not args.truffle and not args.example:
