@@ -155,7 +155,7 @@ class TornadoVMInferenceEngine:
         
         return True
     
-    def predict_hardware(self, features: Dict[str, float]) -> Dict[str, any]:
+    def predict_hardware(self, features: Dict[str, float], available_devices: List[str]) -> Dict[str, any]:
         """
         Predict optimal hardware for a computational task.
         
@@ -171,37 +171,52 @@ class TornadoVMInferenceEngine:
         """
         # Validate input
         self.validate_input(features)
-        
+
         # Convert to DataFrame with correct feature order
         input_df = pd.DataFrame([features])[self.required_features]
-        
+
         # Get probability predictions from each classifier
         prob_1 = self.classifier_1.predict_proba(input_df)[0, 1]  # iGPU vs CPU
-        prob_2 = self.classifier_2.predict_proba(input_df)[0, 1]  # GPU vs CPU  
+        prob_2 = self.classifier_2.predict_proba(input_df)[0, 1]  # GPU vs CPU
         prob_3 = self.classifier_3.predict_proba(input_df)[0, 1]  # GPU vs iGPU
-        
+
         # Apply thresholds to get binary decisions
         igpu_fit = prob_1 >= self.thresholds["igpu_cpu"]
         gpu_fit = prob_2 >= self.thresholds["gpu_cpu"]
         gpu_igpu_fit = prob_3 >= self.thresholds["gpu_igpu"]
-        
+
         # Combine decisions to determine final device
         device_code = f"{int(igpu_fit)}{int(gpu_fit)}{int(gpu_igpu_fit)}"
-        
+
         # Map device codes to hardware
         device_mapping = {
             '000': 'cpu', '001': 'cpu',
-            '100': 'igpu', '101': 'igpu', '110': 'igpu', 
+            '100': 'igpu', '101': 'igpu', '110': 'igpu',
             '010': 'gpu', '011': 'gpu', '111': 'gpu'
         }
-        
+
         predicted_device = device_mapping.get(device_code, 'cpu')
-        
+
+        # If prediction is not in available_devices, fallback
+        if predicted_device not in available_devices:
+            # Fallback logic: choose highest-prob available device
+            candidates = {
+                "gpu": prob_2,
+                "igpu": prob_1,
+                "cpu": 1 - max(prob_1, prob_2)  # assume CPU confidence inverse of others
+            }
+            filtered = {dev: score for dev, score in candidates.items() if dev in available_devices}
+            if not filtered:
+                print("⚠️ No available candidate devices. Defaulting to 'cpu'.")
+                predicted_device = "cpu"
+            else:
+                predicted_device = max(filtered, key=filtered.get)
+
         return {
             "predicted_device": predicted_device,
             "confidence_scores": {
                 "igpu_vs_cpu": prob_1,
-                "gpu_vs_cpu": prob_2, 
+                "gpu_vs_cpu": prob_2,
                 "gpu_vs_igpu": prob_3
             },
             "classifier_decisions": {

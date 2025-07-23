@@ -83,8 +83,8 @@ class TornadoFeatureExtractor:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
 
             if result.returncode == 0:
-                print("✅ TornadoVM execution completed successfully")
-                print(result.stdout)
+                print("✅ TornadoVM feature extraction completed successfully")
+                #print(result.stdout)
 
                 if input_size is not None:
                     inferred_size = input_size
@@ -227,7 +227,7 @@ class TornadoFeatureExtractor:
             print(f"❌ Error loading features: {e}")
             return None
     
-    def predict_device(self, features: Dict) -> str:
+    def predict_device(self, features: Dict, available_devices: List[str]) -> str:
         """
         Predict the optimal device using the ML models.
         
@@ -238,7 +238,7 @@ class TornadoFeatureExtractor:
             Predicted device ('CPU', 'GPU', or 'iGPU')
         """
         try:
-            prediction = self.inference_engine.predict_hardware(features)
+            prediction = self.inference_engine.predict_hardware(features, available_devices)
             return prediction
         except Exception as e:
             print(f"❌ Error during prediction: {e}")
@@ -496,8 +496,10 @@ class TornadoFeatureExtractor:
         ]
         filtered_features = {k: features[k] for k in required_features if k in features}
 
+        lowercase_available_devices = [dev.lower() for dev, entries in available_devices.items() if entries]
+
         # Now pass only filtered_features to the model
-        result = self.predict_device(filtered_features)
+        result = self.predict_device(filtered_features, lowercase_available_devices)
         if isinstance(result, dict) and "predicted_device" in result:
             predicted_device = result["predicted_device"]
         else:
