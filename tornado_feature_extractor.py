@@ -40,29 +40,28 @@ class TornadoFeatureExtractor:
         self.model_dir = model_dir
         self.tornado_path = tornado_path
         self.inference_engine = TornadoVMInferenceEngine(model_dir)
-        
-    def run_tornado_with_features(self, truffle_args: Optional[Tuple[str, str]], example_class: str, input_size: int, features_json_file) -> bool:
+
+    def run_tornado_with_features(self, truffle_args, example_class, input_size, features_json_file) -> Optional[int]:
         """
-        Run TornadoVM with feature extraction enabled.
-        
-        Args:
-            truffle_args: A Tuple containing (lang, script) if truffle is used to run a different program through Java and TornadoVM
-            example_class: The TornadoVM example class to run
-            input_size: Input size for the computation
-            features_json_file: Json file in which code features will be saved
-            
-        Returns:
-            True if successful, False otherwise
+        Run TornadoVM with feature extraction and optionally infer input size from output.
+        Returns actual input_size if inferred, or the one provided.
         """
         jvm_value = (
             "-Dtornado.feature.extraction=True "
             f"-Dtornado.features.dump.dir={features_json_file}"
         )
 
-        cmd = [
-            self.tornado_path,
-            "--jvm", jvm_value,
-        ]
+        if input_size is None:
+            cmd = [
+                self.tornado_path,
+                "--threadInfo",
+                "--jvm", jvm_value,
+            ]
+        else:
+            cmd = [
+                self.tornado_path,
+                "--jvm", jvm_value,
+            ]
 
         if truffle_args:
             cmd += [
@@ -71,36 +70,42 @@ class TornadoFeatureExtractor:
         else:
             cmd += [
                 "-m", example_class,
-                str(input_size),
             ]
-        
+            if input_size is not None:
+                cmd.append(str(input_size))
+
         print(f"Running TornadoVM command:")
         print(f"{' '.join(cmd)}")
         print()
-        
+
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
-            
+
             if result.returncode == 0:
                 print("✅ TornadoVM execution completed successfully")
-                print(f"Output: {result.stdout}")
-                #if result.stderr:
-                #    print(f"Warnings/Errors: {result.stderr}")
-                return True
+                print(result.stdout)
+
+                if input_size is not None:
+                    inferred_size = input_size
+                else:
+                    inferred_size = self.infer_input_size_from_thread_info(result.stdout)
+
+                return inferred_size
+
             else:
                 print(f"❌ TornadoVM execution failed with return code {result.returncode}")
                 print(f"Error: {result.stderr}")
-                return False
-                
+                return None
+
         except subprocess.TimeoutExpired:
             print("❌ TornadoVM execution timed out")
-            return False
+            return None
         except FileNotFoundError:
             print(f"❌ TornadoVM command not found: {self.tornado_path}")
-            return False
+            return None
         except Exception as e:
             print(f"❌ Error running TornadoVM: {e}")
-            return False
+            return None
 
     def get_available_devices(self) -> Tuple[Dict[str, List[str]], Dict[str, List[str]]]:
         """
@@ -176,7 +181,27 @@ class TornadoFeatureExtractor:
                 device_ids[dev_type].append(current_id)
 
         return devices, device_ids
-    
+
+    def infer_input_size_from_thread_info(self, output: str) -> Optional[int]:
+        """
+        Parse the --threadInfo output to extract the total number of threads from Global work size.
+        Supports 1D, 2D, or 3D workloads.
+        """
+        match = re.search(r"Global work size\s*:\s*\[([^\]]+)\]", output)
+        if match:
+            try:
+                dims = [int(x.strip()) for x in match.group(1).split(",")]
+                total_threads = 1
+                for dim in dims:
+                    total_threads *= dim
+                print(f"🧠 Inferred total threads from Global work size: {dims} → {total_threads}")
+                return total_threads
+            except Exception as e:
+                print(f"⚠️ Failed to parse dimensions: {e}")
+                return None
+        print("⚠️ Could not find Global work size line in output")
+        return None
+
     def load_features_from_json(self, features_json_file: str) -> Optional[Dict]:
         """
         Load features from the generated JSON file.
@@ -565,14 +590,14 @@ Examples:
         "-e", "--example",
         help="TornadoVM example class to run (required unless using --truffle)"
     )
-    
+
     parser.add_argument(
-        "-s", "--size", 
-        type=int, 
-        required=True,
-        help="Input size for the computation"
+        "-s", "--size",
+        type=int,
+        required=False,
+        help="Input size for the computation (optional, inferred if not set)"
     )
-    
+
     parser.add_argument(
         "-m", "--model-dir", 
         default=".",
