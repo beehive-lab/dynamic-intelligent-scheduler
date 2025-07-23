@@ -29,7 +29,7 @@ except ImportError as e:
 
 
 class TornadoFeatureExtractor:
-    def __init__(self, model_dir: str = ".", tornado_path: str = "tornado", mode: str = "performance"):
+    def __init__(self, model_dir: str = "./ML", tornado_path: str = "tornado", mode: str = "performance"):
         """
         Initialize the feature extractor.
         
@@ -602,7 +602,7 @@ Examples:
 
     parser.add_argument(
         "--model-dir",
-        default=".",
+        default="./ML",
         help="Directory containing trained models (default: current directory)"
     )
     

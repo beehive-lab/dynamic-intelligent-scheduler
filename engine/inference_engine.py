@@ -2,6 +2,7 @@ import joblib
 import json
 import pandas as pd
 import numpy as np
+from pathlib import Path
 from typing import Dict, List, Tuple
 
 class TornadoVMInferenceEngine:
@@ -9,7 +10,7 @@ class TornadoVMInferenceEngine:
     Inference engine for TornadoVM ML task scheduler.
     Predicts optimal hardware (CPU, iGPU, GPU) for computational tasks.
     """
-    def __init__(self, model_dir: str = "./", mode: str = "performance"):
+    def __init__(self, model_dir: str = "./ML", mode: str = "performance"):
         """
         Initialize the inference engine.
         
@@ -19,13 +20,20 @@ class TornadoVMInferenceEngine:
         self.model_dir = model_dir
         self.mode = mode.lower()
 
-        model_dir_selection = "Energy-Trained-Models" if self.mode == "energy" else "Performance-Trained-Models"
+        self.model_dir = Path(model_dir).resolve()
+        default_path = Path("./ML").resolve()
+
+        if self.model_dir == default_path:
+            subfolder = "Energy-Trained-Models" if self.mode == "energy" else "Performance-Trained-Models"
+            classifier_dir = self.model_dir / subfolder
+        else:
+            classifier_dir = self.model_dir
 
         # Load the three trained classifiers
         try:
-            self.classifier_1 = joblib.load(f"{model_dir}/{model_dir_selection}/IGPUvsCPU_final.joblib")
-            self.classifier_2 = joblib.load(f"{model_dir}/{model_dir_selection}/GPUvsCPU_final.joblib")
-            self.classifier_3 = joblib.load(f"{model_dir}/{model_dir_selection}/GPUvsIGPU_final.joblib")
+            self.classifier_1 = joblib.load(f"{classifier_dir}/IGPUvsCPU_final.joblib")
+            self.classifier_2 = joblib.load(f"{classifier_dir}/GPUvsCPU_final.joblib")
+            self.classifier_3 = joblib.load(f"{classifier_dir}/GPUvsIGPU_final.joblib")
         except FileNotFoundError as e:
             print(f"❌ Could not find model file: {e}")
             raise
