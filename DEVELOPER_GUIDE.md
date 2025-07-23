@@ -36,7 +36,7 @@ python tornado_feature_extractor.py \
 python tornado_feature_extractor.py \
   -e tornado.examples/uk.ac.manchester.tornado.examples.compute.MatrixMultiplication1D \
   -s 1024 \
-  -m ./models
+  --model-dir ./models
 
 # Run with custom features directory
 python tornado_feature_extractor.py \
@@ -47,14 +47,14 @@ python tornado_feature_extractor.py \
 
 ### Command Line Arguments
 
-| Argument | Description | Default |
-|----------|-------------|---------|
-| `-e, --example` | TornadoVM example class to run | Required |
-| `-s, --size` | Input size for the computation | Required |
-| `-m, --model-dir` | Directory containing trained models | Current directory |
-| `-f, --features-dir` | Directory where features.json will be saved | `/home/mikepapadim/manchester/TornadoVM/` |
-| `-t, --tornado-path` | Path to tornado command | `tornado` |
-| `-v, --verbose` | Enable verbose output | False |
+| Argument | Description | Default           |
+|----------|-------------|-------------------|
+| `-e, --example` | TornadoVM example class to run | Required          |
+| `-s, --size` | Input size for the computation | Required          |
+| `--model-dir` | Directory containing trained models | Current directory |
+| `-f, --features-dir` | Directory where features.json will be saved | `$TORNADO_SDK`    |
+| `-t, --tornado-path` | Path to tornado command | `tornado`         |
+| `-v, --verbose` | Enable verbose output | False             |
 
 ## How It Works
 
@@ -193,7 +193,7 @@ This will:
 
 2. **Models not found**
    - Ensure `.joblib` files are in the model directory
-   - Use `-m` flag to specify model directory
+   - Use `--model-dir` flag to specify model directory
 
 3. **Features directory not writable**
    - Ensure the features directory exists and is writable

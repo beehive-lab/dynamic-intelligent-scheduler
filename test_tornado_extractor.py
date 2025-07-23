@@ -45,7 +45,7 @@ def test_feature_extractor():
         "python", "tornado_feature_extractor.py",
         "-e", "tornado.examples/uk.ac.manchester.tornado.examples.compute.MatrixMultiplication1D",
         "-s", "512",
-        "-m", ".",
+        "--model-dir", ".",
         feature_file_arg
     ]
     
