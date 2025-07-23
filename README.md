@@ -73,7 +73,7 @@ It supports automatic device selection based on extracted features.
 ## Additional Material
 
 - See [Developer Guide](DEVELOPER_GUIDE.md) for detailed CLI options, error handling, and integration info.
-- See [Inference Engine Guide](INFERENCE_GUIDE) for detailed information on the prediction system.
+- See [Inference Engine Guide](INFERENCE_GUIDE.md) for detailed information on the prediction system.
 
 ## Acknowledgments
 
