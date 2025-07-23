@@ -41,11 +41,12 @@ class TornadoFeatureExtractor:
         self.tornado_path = tornado_path
         self.inference_engine = TornadoVMInferenceEngine(model_dir)
         
-    def run_tornado_with_features(self, example_class: str, input_size: int, features_json_file) -> bool:
+    def run_tornado_with_features(self, truffle_args: Optional[Tuple[str, str]], example_class: str, input_size: int, features_json_file) -> bool:
         """
         Run TornadoVM with feature extraction enabled.
         
         Args:
+            truffle_args: A Tuple containing (lang, script) if truffle is used to run a different program through Java and TornadoVM
             example_class: The TornadoVM example class to run
             input_size: Input size for the computation
             features_json_file: Json file in which code features will be saved
@@ -57,16 +58,25 @@ class TornadoFeatureExtractor:
             "-Dtornado.feature.extraction=True "
             f"-Dtornado.features.dump.dir={features_json_file}"
         )
+
         cmd = [
             self.tornado_path,
             "--jvm", jvm_value,
-            "-m", example_class,
-            str(input_size),
         ]
+
+        if truffle_args:
+            cmd += [
+                "--truffle", truffle_args[0], truffle_args[1],
+            ]
+        else:
+            cmd += [
+                "-m", example_class,
+                str(input_size),
+            ]
         
-        #print(f"Running TornadoVM command:")
-        #print(f"{' '.join(cmd)}")
-        #print()
+        print(f"Running TornadoVM command:")
+        print(f"{' '.join(cmd)}")
+        print()
         
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
@@ -376,7 +386,7 @@ class TornadoFeatureExtractor:
         except Exception as e:
             print(f"❌ Error cleaning up features file: {e}")
 
-    def run_complete_analysis(self, example_class: str, input_size: int, features_json_file) -> bool:
+    def run_complete_analysis(self, example_class: str, input_size: int, features_json_file, truffle_args: Optional[Tuple[str, str]] = None) -> bool:
         """
         Run complete analysis: extract features, predict device, and compare.
         
@@ -395,7 +405,7 @@ class TornadoFeatureExtractor:
         
         # Step 1: Run TornadoVM with feature extraction
         print("👉 Step 1: Extract code features of selected class with TornadoVM...")
-        if not self.run_tornado_with_features(example_class, input_size, features_json_file):
+        if not self.run_tornado_with_features(truffle_args, example_class, input_size, features_json_file):
             return False
         
         # Step 2: Detect available devices
@@ -485,13 +495,21 @@ class TornadoFeatureExtractor:
             print(f"❌ No device ID found for predicted device type: {target_device_type}")
         else:
             device_id = device_id_list[0]  # Use first matching device ID
-            final_cmd = [
-                self.tornado_path,
-                "--threadInfo",
-                f'--jvm=-Ds0.t0.device={device_id}',
-                "-m", example_class,
-                str(input_size)
-            ]
+            if truffle_args:
+                final_cmd = [
+                    self.tornado_path,
+                    "--threadInfo",
+                    f'--jvm=\"-Ds0.t0.device={device_id}\"',
+                    "--truffle", truffle_args[0], truffle_args[1]
+                ]
+            else:
+                final_cmd = [
+                    self.tornado_path,
+                    "--threadInfo",
+                    f'--jvm=\"-Ds0.t0.device={device_id}\"',
+                    "-m", example_class,
+                    str(input_size)
+                ]
             print(f"Executing: {' '.join(final_cmd)}\n")
             try:
                 result = subprocess.run(final_cmd, capture_output=True, text=True, timeout=300)
@@ -510,7 +528,12 @@ class TornadoFeatureExtractor:
         print("ANALYSIS SUMMARY")
         print("=" * 60)
         print(f"Input size: {input_size}")
-        print(f"Example class: {example_class}")
+        if truffle_args:
+            print(f"Truffle is used for language: {truffle_args[0]}")
+            print(f"Running program: {truffle_args[1]}")
+        else:
+            print(f"Running class: {example_class}")
+
         print(f"Predicted device: {self.getDeviceFromDict(predicted_device)}")
         print(f"Available devices: {list(available_devices.keys())}")
         print(f"Prediction matches available: {'Yes' if is_available else 'No'}")
@@ -537,11 +560,10 @@ Examples:
   python tornado_feature_extractor.py -e tornado.examples/uk.ac.manchester.tornado.examples.compute.MatrixMultiplication1D -s 256 -f /custom/features/path
         """
     )
-    
+
     parser.add_argument(
-        "-e", "--example", 
-        required=True,
-        help="TornadoVM example class to run"
+        "-e", "--example",
+        help="TornadoVM example class to run (required unless using --truffle)"
     )
     
     parser.add_argument(
@@ -561,6 +583,13 @@ Examples:
         "-f", "--features_json_file",
         default=os.path.join(os.environ["TORNADO_SDK"], "features.json"),
         help="File to dump extracted features features in JSON format (.json)"
+    )
+
+    parser.add_argument(
+        "--truffle",
+        nargs=2,
+        metavar=("LANG", "SCRIPT"),
+        help="Run using Truffle polyglot engine with specified language and script"
     )
     
     parser.add_argument(
@@ -582,13 +611,27 @@ Examples:
         model_dir=args.model_dir,
         tornado_path=args.tornado_path
     )
-    
+
+    if not args.truffle and not args.example:
+        parser.error("Either --example (-e) or --truffle must be provided.")
+        sys.exit(0)
+
     # Run complete analysis
-    success = extractor.run_complete_analysis(
-        example_class=args.example,
-        input_size=args.size,
-        features_json_file=args.features_json_file
-    )
+    if args.truffle:
+        lang, script = args.truffle
+        success = extractor.run_complete_analysis(
+            example_class=None,
+            input_size=args.size,
+            features_json_file=args.features_json_file,
+            truffle_args=(lang, script)
+        )
+    else:
+        # Existing Java class mode
+        success = extractor.run_complete_analysis(
+            example_class=args.example,
+            input_size=args.size,
+            features_json_file=args.features_json_file
+        )
     
     if success:
         print("\n✅ Analysis completed successfully")
