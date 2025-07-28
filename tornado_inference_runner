@@ -550,7 +550,7 @@ class TornadoFeatureExtractor:
             print(f"Executing: {' '.join(final_cmd)}\n")
             try:
                 result = subprocess.run(final_cmd, capture_output=True, text=True, timeout=300)
-                print(result.stdout)
+                #print(result.stdout)
                 #if result.stderr:
                 #    print(f"⚠️ stderr: {result.stderr}")
                 if result.returncode == 0:
