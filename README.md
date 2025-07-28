@@ -42,7 +42,7 @@ Replace /path/to/... with your actual local paths.
 To run the feature extraction and execution pipeline on a sample matrix multiplication workload:
 
 ```bash
-python tornado_feature_extractor.py -e tornado.examples/uk.ac.manchester.tornado.examples.compute.MatrixMultiplication1D -s 1024
+python tornado_inference_runner -e tornado.examples/uk.ac.manchester.tornado.examples.compute.MatrixMultiplication1D -s 1024
 ```
 
 ### Command Line Arguments

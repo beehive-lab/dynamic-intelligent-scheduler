@@ -584,9 +584,9 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python tornado_feature_extractor.py -e tornado.examples/uk.ac.manchester.tornado.examples.compute.MatrixMultiplication1D -s 512
-  python tornado_feature_extractor.py -e tornado.examples/uk.ac.manchester.tornado.examples.compute.MatrixMultiplication1D -s 1024 --model-dir ./models
-  python tornado_feature_extractor.py -e tornado.examples/uk.ac.manchester.tornado.examples.compute.MatrixMultiplication1D -s 256 -f /custom/features/path
+  python tornado_inference_runner -e tornado.examples/uk.ac.manchester.tornado.examples.compute.MatrixMultiplication1D -s 512
+  python tornado_inference_runner -e tornado.examples/uk.ac.manchester.tornado.examples.compute.MatrixMultiplication1D -s 1024 --model-dir ./models
+  python tornado_inference_runner -e tornado.examples/uk.ac.manchester.tornado.examples.compute.MatrixMultiplication1D -s 256 -f /custom/features/path
         """
     )
 

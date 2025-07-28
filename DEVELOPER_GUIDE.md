@@ -21,25 +21,25 @@ This script automates the process of running TornadoVM with feature extraction, 
 ### Basic Usage
 
 ```bash
-python tornado_feature_extractor.py -e <example_class> -s <input_size>
+python tornado_inference_runner -e <example_class> -s <input_size>
 ```
 
 ### Examples
 
 ```bash
 # Run MatrixMultiplication1D with size 512
-python tornado_feature_extractor.py \
+python tornado_inference_runner \
   -e tornado.examples/uk.ac.manchester.tornado.examples.compute.MatrixMultiplication1D \
   -s 512
 
 # Run with custom model directory
-python tornado_feature_extractor.py \
+python tornado_inference_runner \
   -e tornado.examples/uk.ac.manchester.tornado.examples.compute.MatrixMultiplication1D \
   -s 1024 \
   --model-dir ./models
 
 # Run with custom features directory
-python tornado_feature_extractor.py \
+python tornado_inference_runner \
   -e tornado.examples/uk.ac.manchester.tornado.examples.compute.MatrixMultiplication1D \
   -s 256 \
   -f /custom/features/path
@@ -200,7 +200,7 @@ This will:
    - Use `-f` flag to specify custom features directory
 
 4. **Permission denied**
-   - Ensure the script has execute permissions: `chmod +x tornado_feature_extractor.py`
+   - Ensure the script has execute permissions: `chmod +x tornado_feature_extractor`
 
 ### Debug Mode
 
@@ -217,7 +217,7 @@ This script can be integrated into:
 
 ## Files
 
-- `tornado_feature_extractor.py`: Main script
+- `tornado_feature_extractor`: Main script
 - `test_tornado_extractor.py`: Test script
 - `inference_engine.py`: ML inference engine
 - `*.joblib`: Trained ML models

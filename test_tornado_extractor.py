@@ -2,7 +2,7 @@
 """
 Test script for TornadoVM Feature Extractor
 
-This script demonstrates how to use the tornado_feature_extractor.py
+This script demonstrates how to use the tornado_inference_runner
 to run TornadoVM with feature extraction and compare predictions with available devices.
 """
 
@@ -42,7 +42,7 @@ def test_feature_extractor():
     )
     # Test command
     cmd = [
-        "python", "tornado_feature_extractor.py",
+        "python", "tornado_inference_runner",
         "-e", "tornado.examples/uk.ac.manchester.tornado.examples.compute.MatrixMultiplication1D",
         "-s", "512",
         "--model-dir", ".",
@@ -82,7 +82,7 @@ def main():
     
     # Check if required files exist
     required_files = [
-        "tornado_feature_extractor.py",
+        "tornado_inference_runner",
         "inference_engine.py",
         "IGPUvsCPU_final.joblib",
         "GPUvsCPU_final.joblib", 
@@ -109,7 +109,7 @@ def main():
     if success:
         print("\n🎉 All tests completed successfully!")
         print("\nYou can now use the feature extractor with:")
-        print("python tornado_feature_extractor.py -e <example_class> -s <size>")
+        print("python tornado_inference_runner -e <example_class> -s <size>")
     else:
         print("\n❌ Some tests failed. Please check the output above.")
     
