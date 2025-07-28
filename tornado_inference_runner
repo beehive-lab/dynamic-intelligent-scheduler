@@ -431,7 +431,8 @@ class TornadoFeatureExtractor:
         
         # Step 1: Run TornadoVM with feature extraction
         print("👉 Step 1: Extract code features of selected class with TornadoVM...")
-        if not self.run_tornado_with_features(truffle_args, example_class, input_size, features_json_file):
+        inferred_size = self.run_tornado_with_features(truffle_args, example_class, input_size, features_json_file)
+        if not inferred_size:
             return False
         
         # Step 2: Detect available devices
@@ -458,7 +459,7 @@ class TornadoFeatureExtractor:
 
         # PATCH START: Inject threads field
         workload_name = list(features_json.keys())[0]
-        features_json[workload_name]["threads"] = str(input_size)
+        features_json[workload_name]["threads"] = str(inferred_size)
         # PATCH END
 
         features_json = self.load_features_from_json(features_json_file)
@@ -468,7 +469,7 @@ class TornadoFeatureExtractor:
 
         workload_name = list(features_json.keys())[0]
         features = features_json[workload_name]
-        features["threads"] = str(input_size)
+        features["threads"] = str(inferred_size)
 
         # Normalize the features dict, not the outer dict!
         features = self.normalize_features(features)
@@ -531,13 +532,21 @@ class TornadoFeatureExtractor:
                     "--truffle", truffle_args[0], truffle_args[1]
                 ]
             else:
-                final_cmd = [
-                    self.tornado_path,
-                    "--threadInfo",
-                    f'--jvm=\"-Ds0.t0.device={device_id}\"',
-                    "-m", example_class,
-                    str(input_size)
-                ]
+                if not (input_size):
+                    final_cmd = [
+                        self.tornado_path,
+                        "--threadInfo",
+                        f'--jvm=\"-Ds0.t0.device={device_id}\"',
+                        "-m", example_class
+                    ]
+                else:
+                    final_cmd = [
+                        self.tornado_path,
+                        "--threadInfo",
+                        f'--jvm=\"-Ds0.t0.device={device_id}\"',
+                        "-m", example_class,
+                        str(input_size)
+                    ]
             print(f"Executing: {' '.join(final_cmd)}\n")
             try:
                 result = subprocess.run(final_cmd, capture_output=True, text=True, timeout=300)
