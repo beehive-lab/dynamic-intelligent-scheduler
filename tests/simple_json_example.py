@@ -3,7 +3,7 @@
 Simple example of using TornadoVM ML Inference Engine with JSON input
 """
 
-from inference_engine import TornadoVMInferenceEngine
+from engine.inference_engine import TornadoVMInferenceEngine
 
 def main():
     # Your JSON input (from features.json)

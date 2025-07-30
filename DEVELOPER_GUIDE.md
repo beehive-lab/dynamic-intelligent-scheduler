@@ -1,4 +1,4 @@
-# TornadoVM Feature Extractor
+# Detailed CLI options, error handling, and integration info of TornadoVM Feature Extractor
 
 This script automates the process of running TornadoVM with feature extraction, predicting the optimal device using ML models, and comparing the prediction with available devices.
 
@@ -21,25 +21,25 @@ This script automates the process of running TornadoVM with feature extraction, 
 ### Basic Usage
 
 ```bash
-python tornado_feature_extractor.py -e <example_class> -s <input_size>
+python tornado_inference_runner -e <example_class> -s <input_size>
 ```
 
 ### Examples
 
 ```bash
 # Run MatrixMultiplication1D with size 512
-python tornado_feature_extractor.py \
+python tornado_inference_runner \
   -e tornado.examples/uk.ac.manchester.tornado.examples.compute.MatrixMultiplication1D \
   -s 512
 
 # Run with custom model directory
-python tornado_feature_extractor.py \
+python tornado_inference_runner \
   -e tornado.examples/uk.ac.manchester.tornado.examples.compute.MatrixMultiplication1D \
   -s 1024 \
-  -m ./models
+  --model-dir ./models
 
 # Run with custom features directory
-python tornado_feature_extractor.py \
+python tornado_inference_runner \
   -e tornado.examples/uk.ac.manchester.tornado.examples.compute.MatrixMultiplication1D \
   -s 256 \
   -f /custom/features/path
@@ -47,14 +47,14 @@ python tornado_feature_extractor.py \
 
 ### Command Line Arguments
 
-| Argument | Description | Default |
-|----------|-------------|---------|
-| `-e, --example` | TornadoVM example class to run | Required |
-| `-s, --size` | Input size for the computation | Required |
-| `-m, --model-dir` | Directory containing trained models | Current directory |
-| `-f, --features-dir` | Directory where features.json will be saved | `/home/mikepapadim/manchester/TornadoVM/` |
-| `-t, --tornado-path` | Path to tornado command | `tornado` |
-| `-v, --verbose` | Enable verbose output | False |
+| Argument | Description | Default           |
+|----------|-------------|-------------------|
+| `-e, --example` | TornadoVM example class to run | Required          |
+| `-s, --size` | Input size for the computation | Required          |
+| `--model-dir` | Directory containing trained models | Current directory |
+| `-f, --features-dir` | Directory where features.json will be saved | `$TORNADO_SDK`    |
+| `-t, --tornado-path` | Path to tornado command | `tornado`         |
+| `-v, --verbose` | Enable verbose output | False             |
 
 ## How It Works
 
@@ -79,39 +79,80 @@ The script performs the following steps:
 ## Output Example
 
 ```
-============================================================
-TORNADOVM FEATURE EXTRACTION AND DEVICE ANALYSIS
-============================================================
+======================================================================
+TornadoVM FEATURE EXTRACTION AND DYNAMIC INTELLIGENT EXECUTION
+======================================================================
 
-Step 1: Running TornadoVM with feature extraction...
-Running TornadoVM command:
-  tornado --jvm=-Dtornado.feature.extraction=True -Dtornado.features.dump.dir=/home/mikepapadim/manchester/TornadoVM/ -m tornado.examples/uk.ac.manchester.tornado.examples.compute.MatrixMultiplication1D 512
-
+👉 Step 1: Extract code features of selected class with TornadoVM...
 ✅ TornadoVM execution completed successfully
+Output: Computing MxM of 1024x1024
+	Single Threaded CPU Execution: 0.90 GFlops, Total time = 2397 ms
+	TornadoVM Execution on GPU (Accelerated): 357.91 GFlops, Total Time = 6 ms
+	Speedup: 399.5x
+	Verification true
 
-Step 2: Getting available devices...
-Available devices:
-  GPU: 1 device(s)
-    - OPENCL --  [NVIDIA CUDA] -- NVIDIA GeForce RTX 3070
 
-Step 3: Loading features from JSON...
+
+👉 Step 2: Detecting available devices...
+=== Detected 1 device(s) of GPU type ===
+----------------------------------------------------------------------
+ Tornado device=0:0  (DEFAULT)
+OPENCL --  [NVIDIA CUDA] -- NVIDIA RTX A2000 8GB Laptop GPU
+Global Memory Size: 7.8 GB
+Local Memory Size: 48.0 KB
+Workgroup Dimensions: 3
+Total Number of Block Threads: [1024]
+Max WorkGroup Configuration: [1024, 1024, 64]
+Device OpenCL C version: OpenCL C 1.2
+----------------------------------------------------------------------
+=== Detected 1 device(s) of iGPU type ===
+----------------------------------------------------------------------
+ Tornado device=0:1
+OPENCL --  [Intel(R) OpenCL Graphics] -- Intel(R) Iris(R) Xe Graphics
+Global Memory Size: 28.7 GB
+Local Memory Size: 64.0 KB
+Workgroup Dimensions: 3
+Total Number of Block Threads: [512]
+Max WorkGroup Configuration: [512, 512, 512]
+Device OpenCL C version: OpenCL C 1.2
+----------------------------------------------------------------------
+
+👉 Step 3: Loading features from JSON...
 ✅ Features loaded successfully
-   Input size: 512
-   Number of features: 15
+   Input size: 1024
+   Number of features: 29
 
-Step 4: Predicting optimal device...
-✅ Predicted optimal device: GPU
 
-Step 5: Comparing prediction with available devices...
-✅ Predicted device 'GPU' is available
+👉 Step 4: Predicting optimal device type...
+✅ Predicted optimal device type: GPU
 
+👉 Step 5: Running workload on predicted device...
+Executing: tornado --threadInfo --jvm=-Ds0.t0.device=0:0 -m tornado.examples/uk.ac.manchester.tornado.examples.compute.MatrixMultiplication1D 1024
+
+Computing MxM of 1024x1024
+Task info: s0.t0
+	Backend           : OPENCL
+	Device            : NVIDIA RTX A2000 8GB Laptop GPU CL_DEVICE_TYPE_GPU (available)
+	Dims              : 2
+	Global work offset: [0, 0]
+	Global work size  : [1024, 1024]
+	Local  work size  : [32, 32, 1]
+	Number of workgroups  : [32, 32]
+
+	Single Threaded CPU Execution: 0.89 GFlops, Total time = 2403 ms
+	TornadoVM Execution on GPU (Accelerated): 306.78 GFlops, Total Time = 7 ms
+	Speedup: 343.2857142857143x
+	Verification true
+
+
+✅ Final execution completed successfully
 ============================================================
 ANALYSIS SUMMARY
 ============================================================
-Input size: 512
+Input size: 1024
 Example class: tornado.examples/uk.ac.manchester.tornado.examples.compute.MatrixMultiplication1D
 Predicted device: GPU
-Available devices: ['GPU']
+Available devices: ['CPU', 'GPU', 'iGPU']
 Prediction matches available: Yes
 
 ✅ Analysis completed successfully
@@ -152,14 +193,14 @@ This will:
 
 2. **Models not found**
    - Ensure `.joblib` files are in the model directory
-   - Use `-m` flag to specify model directory
+   - Use `--model-dir` flag to specify model directory
 
 3. **Features directory not writable**
    - Ensure the features directory exists and is writable
    - Use `-f` flag to specify custom features directory
 
 4. **Permission denied**
-   - Ensure the script has execute permissions: `chmod +x tornado_feature_extractor.py`
+   - Ensure the script has execute permissions: `chmod +x tornado_feature_extractor`
 
 ### Debug Mode
 
@@ -176,8 +217,7 @@ This script can be integrated into:
 
 ## Files
 
-- `tornado_feature_extractor.py`: Main script
+- `tornado_feature_extractor`: Main script
 - `test_tornado_extractor.py`: Test script
 - `inference_engine.py`: ML inference engine
 - `*.joblib`: Trained ML models
-- `README_feature_extractor.md`: This documentation 

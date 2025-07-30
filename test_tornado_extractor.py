@@ -2,7 +2,7 @@
 """
 Test script for TornadoVM Feature Extractor
 
-This script demonstrates how to use the tornado_feature_extractor.py
+This script demonstrates how to use the tornado_inference_runner
 to run TornadoVM with feature extraction and compare predictions with available devices.
 """
 
@@ -36,14 +36,17 @@ def test_feature_extractor():
     print("\n" + "="*60)
     print("TESTING TORNADOVM FEATURE EXTRACTOR")
     print("="*60)
-    
+    features_json_file=os.path.join(os.environ["TORNADO_SDK"], "features.json")
+    feature_file_arg = (
+        f"-f={features_json_file}"
+    )
     # Test command
     cmd = [
-        "python", "tornado_feature_extractor.py",
+        "python", "tornado_inference_runner",
         "-e", "tornado.examples/uk.ac.manchester.tornado.examples.compute.MatrixMultiplication1D",
         "-s", "512",
-        "-m", ".",
-        "-f", "/home/mikepapadim/manchester/TornadoVM/"
+        "--model-dir", ".",
+        feature_file_arg
     ]
     
     print(f"Running: {' '.join(cmd)}")
@@ -79,7 +82,7 @@ def main():
     
     # Check if required files exist
     required_files = [
-        "tornado_feature_extractor.py",
+        "tornado_inference_runner",
         "inference_engine.py",
         "IGPUvsCPU_final.joblib",
         "GPUvsCPU_final.joblib", 
@@ -106,7 +109,7 @@ def main():
     if success:
         print("\n🎉 All tests completed successfully!")
         print("\nYou can now use the feature extractor with:")
-        print("python tornado_feature_extractor.py -e <example_class> -s <size>")
+        print("python tornado_inference_runner -e <example_class> -s <size>")
     else:
         print("\n❌ Some tests failed. Please check the output above.")
     

@@ -4,7 +4,7 @@ Test script for TornadoVM ML Inference Engine with JSON input format
 """
 
 import json
-from inference_engine import TornadoVMInferenceEngine
+from engine.inference_engine import TornadoVMInferenceEngine
 
 def load_json_file(filename: str) -> dict:
     """Load JSON file and return dictionary."""

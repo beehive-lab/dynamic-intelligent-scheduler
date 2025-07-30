@@ -62,7 +62,7 @@ Provide JSON data in the format from TornadoVM profiling:
 
 ### Basic Usage with JSON Input
 ```python
-from inference_engine import TornadoVMInferenceEngine
+from engine.inference_engine import TornadoVMInferenceEngine
 
 # Initialize engine
 engine = TornadoVMInferenceEngine()
@@ -89,7 +89,7 @@ print(f"Predicted Device: {result['predicted_device']}")
 
 ### Basic Usage with Direct Features
 ```python
-from inference_engine import TornadoVMInferenceEngine
+from engine.inference_engine import TornadoVMInferenceEngine
 
 # Initialize engine
 engine = TornadoVMInferenceEngine()
@@ -192,13 +192,13 @@ importance = engine.get_feature_importance("all")
 
 ```bash
 # Test with your JSON input
-python test_json_input.py
+python -m tests.test_json_input
 
 # Simple JSON example
-python simple_json_example.py
+python -m tests.simple_json_example
 
 # Run inference engine directly
-python inference_engine.py
+python -m engine.inference_engine
 ```
 
 ## JSON Field Mapping
