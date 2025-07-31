@@ -8,7 +8,8 @@ from typing import Dict, List, Tuple
 class TornadoVMInferenceEngine:
     """
     Inference engine for TornadoVM ML task scheduler.
-    Predicts optimal hardware (CPU, iGPU, GPU) for computational tasks.
+    Predicts optimal hardware (CPU, iGPU, GPU, Java) for computational tasks.
+    Supports both performance and power optimization modes.
     """
     def __init__(self, model_dir: str = "./ML", mode: str = "performance"):
         """
@@ -16,6 +17,7 @@ class TornadoVMInferenceEngine:
         
         Args:
             model_dir: Directory containing the saved model files
+            mode: "performance" or "power" - determines which models to use
         """
         self.model_dir = model_dir
         self.mode = mode.lower()
@@ -24,30 +26,67 @@ class TornadoVMInferenceEngine:
         default_path = Path("./ML").resolve()
 
         if self.model_dir == default_path:
-            subfolder = "Energy-Trained-Models" if self.mode == "energy" else "Performance-Trained-Models"
-            classifier_dir = self.model_dir / subfolder
+            if self.mode == "power":
+                classifier_dir = self.model_dir / "Power-trained-Models"
+            elif self.mode == "energy":
+                subfolder = "Energy-Trained-Models"
+                classifier_dir = self.model_dir / subfolder
+            else:
+                subfolder = "Performance-Trained-Models"
+                classifier_dir = self.model_dir / subfolder
         else:
             classifier_dir = self.model_dir
 
-        # Load the three trained classifiers
+        # Load the trained classifiers based on mode
         try:
-            self.classifier_1 = joblib.load(f"{classifier_dir}/IGPUvsCPU_final.joblib")
-            self.classifier_2 = joblib.load(f"{classifier_dir}/GPUvsCPU_final.joblib")
-            self.classifier_3 = joblib.load(f"{classifier_dir}/GPUvsIGPU_final.joblib")
+            if self.mode == "power":
+                # Power mode uses 6 classifiers (clf1-clf6)
+                self.classifier_1 = joblib.load(f"{classifier_dir}/clf1_energy_etc.pkl")
+                self.classifier_2 = joblib.load(f"{classifier_dir}/clf2_energy_etc.pkl")
+                self.classifier_3 = joblib.load(f"{classifier_dir}/clf3_energy_etc.pkl")
+                self.classifier_4 = joblib.load(f"{classifier_dir}/clf4_energy_etc.pkl")
+                self.classifier_5 = joblib.load(f"{classifier_dir}/clf5_energy_etc.pkl")
+                self.classifier_6 = joblib.load(f"{classifier_dir}/clf6_energy_etc.pkl")
+                
+                # Power mode thresholds (from test results)
+                self.thresholds = {
+                    "igpu_cpu": 0.0,      # clf1: regression threshold
+                    "gpu_cpu": 0.4,       # clf2: classification threshold
+                    "gpu_igpu": 0.67,     # clf3: classification threshold
+                    "java_cpu": 0.5,      # clf4: classification threshold
+                    "java_gpu": 0.5,      # clf5: classification threshold
+                    "java_igpu": 0.5      # clf6: classification threshold
+                }
+            else:
+                # Performance mode uses 3 classifiers
+                self.classifier_1 = joblib.load(f"{classifier_dir}/IGPUvsCPU_final.joblib")
+                self.classifier_2 = joblib.load(f"{classifier_dir}/GPUvsCPU_final.joblib")
+                self.classifier_3 = joblib.load(f"{classifier_dir}/GPUvsIGPU_final.joblib")
+                
+                # Performance mode thresholds
+                self.thresholds = {
+                    "igpu_cpu": 0.15,    # Classifier 1 threshold
+                    "gpu_cpu": 0.4,      # Classifier 2 threshold  
+                    "gpu_igpu": 0.67     # Classifier 3 threshold
+                }
+                
         except FileNotFoundError as e:
             print(f"❌ Could not find model file: {e}")
+            print(f"Mode: {self.mode}")
+            print(f"Looking in: {classifier_dir}")
             raise
         
         # Load feature names
-        with open(f"{model_dir}/Final Artifacts/features.txt", 'r') as f:
-            self.feature_names = json.load(f)
-        
-        # Define thresholds for each classifier
-        self.thresholds = {
-            "igpu_cpu": 0.15,    # Classifier 1 threshold
-            "gpu_cpu": 0.4,      # Classifier 2 threshold  
-            "gpu_igpu": 0.67     # Classifier 3 threshold
-        }
+        try:
+            with open(f"{model_dir}/Final Artifacts/features.txt", 'r') as f:
+                self.feature_names = json.load(f)
+        except FileNotFoundError:
+            # Fallback feature names if file doesn't exist
+            self.feature_names = {
+                "c1": ["threads", "global_memory_loads", "global_memory_stores", "local_memory_loads", "local_memory_stores", "total_loops", "parallel_loops", "cast_operations", "vector_operations", "total_integer_operations"],
+                "c2": ["threads", "global_memory_loads", "global_memory_stores", "local_memory_loads", "local_memory_stores", "total_loops", "parallel_loops", "cast_operations", "vector_operations", "total_integer_operations"],
+                "c3": ["threads", "global_memory_loads", "global_memory_stores", "local_memory_loads", "local_memory_stores", "total_loops", "parallel_loops", "cast_operations", "vector_operations", "total_integer_operations"]
+            }
         
         # Required features (same for all classifiers)
         self.required_features = [
@@ -111,107 +150,153 @@ class TornadoVMInferenceEngine:
                     features[required_field] = 0.0
         
         return features
-    
+
     def predict_from_json(self, json_data: Dict) -> Dict[str, any]:
         """
-        Predict hardware directly from JSON input format.
+        Predict optimal hardware from JSON input format.
         
         Args:
             json_data: Dictionary containing workload data in JSON format
             
         Returns:
-            Dictionary containing prediction results
+            Dictionary with prediction results
         """
-        # Parse JSON to required format
+        # Parse JSON input to get features
         features = self.parse_json_input(json_data)
         
-        # Get prediction
-        result = self.predict_hardware(features)
-        
-        # Add original JSON data to result for reference
-        result["input_json"] = json_data
-        result["parsed_features"] = features
-        
-        return result
-    
+        # Get prediction using the features
+        return self.predict_hardware(features)
+
     def validate_input(self, features: Dict[str, float]) -> bool:
         """
-        Validate that all required features are provided.
+        Validate that all required features are present.
         
         Args:
-            features: Dictionary of feature names to values
+            features: Dictionary of features
             
         Returns:
-            True if valid, raises ValueError if not
+            True if valid, False otherwise
         """
-        missing_features = set(self.required_features) - set(features.keys())
-        if missing_features:
-            raise ValueError(f"Missing required features: {missing_features}")
-        
-        # Check for non-numeric values
-        for feature, value in features.items():
-            if not isinstance(value, (int, float)):
-                raise ValueError(f"Feature {feature} must be numeric, got {type(value)}")
-        
+        for feature in self.required_features:
+            if feature not in features:
+                print(f"❌ Missing required feature: {feature}")
+                return False
         return True
-    
-    def predict_hardware(self, features: Dict[str, float], available_devices: List[str]) -> Dict[str, any]:
+
+    def predict_hardware(self, features: Dict[str, float], available_devices: List[str] = None) -> Dict[str, any]:
         """
-        Predict optimal hardware for a computational task.
+        Predict optimal hardware for given features.
         
         Args:
-            features: Dictionary of feature names to values
+            features: Dictionary of features
+            available_devices: List of available devices (optional)
             
         Returns:
-            Dictionary containing:
-            - predicted_device: 'cpu', 'igpu', or 'gpu'
-            - confidence_scores: Probabilities from each classifier
-            - classifier_decisions: Binary decisions from each classifier
-            - raw_probabilities: Raw probability outputs
+            Dictionary with prediction results
         """
         # Validate input
-        self.validate_input(features)
+        if not self.validate_input(features):
+            raise ValueError("Invalid input features")
+        
+        # Convert features to array for prediction
+        feature_array = np.array([features[feature] for feature in self.required_features]).reshape(1, -1)
+        
+        if self.mode == "power":
+            # Power mode: 6-classifier architecture
+            return self._predict_power_mode(feature_array, features)
+        else:
+            # Performance mode: 3-classifier architecture
+            return self._predict_performance_mode(feature_array, features)
 
-        # Convert to DataFrame with correct feature order
-        input_df = pd.DataFrame([features])[self.required_features]
-
-        # Get probability predictions from each classifier
-        prob_1 = self.classifier_1.predict_proba(input_df)[0, 1]  # iGPU vs CPU
-        prob_2 = self.classifier_2.predict_proba(input_df)[0, 1]  # GPU vs CPU
-        prob_3 = self.classifier_3.predict_proba(input_df)[0, 1]  # GPU vs iGPU
-
-        # Apply thresholds to get binary decisions
-        igpu_fit = prob_1 >= self.thresholds["igpu_cpu"]
-        gpu_fit = prob_2 >= self.thresholds["gpu_cpu"]
-        gpu_igpu_fit = prob_3 >= self.thresholds["gpu_igpu"]
-
-        # Combine decisions to determine final device
-        device_code = f"{int(igpu_fit)}{int(gpu_fit)}{int(gpu_igpu_fit)}"
-
-        # Map device codes to hardware
-        device_mapping = {
-            '000': 'cpu', '001': 'cpu',
-            '100': 'igpu', '101': 'igpu', '110': 'igpu',
-            '010': 'gpu', '011': 'gpu', '111': 'gpu'
+    def _predict_power_mode(self, feature_array: np.ndarray, features: Dict[str, float]) -> Dict[str, any]:
+        """
+        Power mode prediction using 6 classifiers.
+        """
+        # Get predictions from all 6 classifiers
+        prob_1 = self.classifier_1.predict(feature_array)[0]  # clf1: regression
+        prob_2 = self.classifier_2.predict_proba(feature_array)[0][1]  # clf2: classification
+        prob_3 = self.classifier_3.predict_proba(feature_array)[0][1]  # clf3: classification
+        prob_4 = self.classifier_4.predict_proba(feature_array)[0][1]  # clf4: classification
+        prob_5 = self.classifier_5.predict_proba(feature_array)[0][1]  # clf5: classification
+        prob_6 = self.classifier_6.predict_proba(feature_array)[0][1]  # clf6: classification
+        
+        # Apply thresholds
+        igpu_fit = prob_1 < self.thresholds["igpu_cpu"]  # clf1: regression threshold
+        gpu_fit = prob_2 > self.thresholds["gpu_cpu"]    # clf2: classification threshold
+        gpu_igpu_fit = prob_3 > self.thresholds["gpu_igpu"]  # clf3: classification threshold
+        java_cpu_fit = prob_4 > self.thresholds["java_cpu"]  # clf4: classification threshold
+        java_gpu_fit = prob_5 > self.thresholds["java_gpu"]  # clf5: classification threshold
+        java_igpu_fit = prob_6 > self.thresholds["java_igpu"]  # clf6: classification threshold
+        
+        # Determine base device (first 3 classifiers)
+        device_code = ""
+        device_code += "1" if igpu_fit else "0"
+        device_code += "1" if gpu_fit else "0"
+        device_code += "1" if gpu_igpu_fit else "0"
+        
+        # Map device code to base device
+        base_device = self._map_device_code_to_device(device_code)
+        
+        # Determine if Java is better than base device
+        java_better = False
+        if base_device == "cpu" and java_cpu_fit:
+            java_better = True
+        elif base_device == "gpu" and java_gpu_fit:
+            java_better = True
+        elif base_device == "igpu" and java_igpu_fit:
+            java_better = True
+        
+        # Final device recommendation
+        predicted_device = "java" if java_better else base_device
+        
+        return {
+            "predicted_device": predicted_device,
+            "base_device": base_device,
+            "java_recommended": java_better,
+            "confidence_scores": {
+                "igpu_vs_cpu": prob_1,
+                "gpu_vs_cpu": prob_2,
+                "gpu_vs_igpu": prob_3,
+                "java_vs_cpu": prob_4,
+                "java_vs_gpu": prob_5,
+                "java_vs_igpu": prob_6
+            },
+            "classifier_decisions": {
+                "igpu_fit": igpu_fit,
+                "gpu_fit": gpu_fit,
+                "gpu_igpu_fit": gpu_igpu_fit,
+                "java_cpu_fit": java_cpu_fit,
+                "java_gpu_fit": java_gpu_fit,
+                "java_igpu_fit": java_igpu_fit
+            },
+            "raw_probabilities": [prob_1, prob_2, prob_3, prob_4, prob_5, prob_6],
+            "device_code": device_code,
+            "mode": "power"
         }
 
-        predicted_device = device_mapping.get(device_code, 'cpu')
-
-        # If prediction is not in available_devices, fallback
-        if predicted_device not in available_devices:
-            # Fallback logic: choose highest-prob available device
-            candidates = {
-                "gpu": prob_2,
-                "igpu": prob_1,
-                "cpu": 1 - max(prob_1, prob_2)  # assume CPU confidence inverse of others
-            }
-            filtered = {dev: score for dev, score in candidates.items() if dev in available_devices}
-            if not filtered:
-                print("⚠️ No available candidate devices. Defaulting to 'cpu'.")
-                predicted_device = "cpu"
-            else:
-                predicted_device = max(filtered, key=filtered.get)
-
+    def _predict_performance_mode(self, feature_array: np.ndarray, features: Dict[str, float]) -> Dict[str, any]:
+        """
+        Performance mode prediction using 3 classifiers.
+        """
+        # Get predictions from the 3 classifiers
+        prob_1 = self.classifier_1.predict_proba(feature_array)[0][1]  # iGPU vs CPU
+        prob_2 = self.classifier_2.predict_proba(feature_array)[0][1]  # GPU vs CPU
+        prob_3 = self.classifier_3.predict_proba(feature_array)[0][1]  # GPU vs iGPU
+        
+        # Apply thresholds
+        igpu_fit = prob_1 > self.thresholds["igpu_cpu"]
+        gpu_fit = prob_2 > self.thresholds["gpu_cpu"]
+        gpu_igpu_fit = prob_3 > self.thresholds["gpu_igpu"]
+        
+        # Determine device code
+        device_code = ""
+        device_code += "1" if igpu_fit else "0"
+        device_code += "1" if gpu_fit else "0"
+        device_code += "1" if gpu_igpu_fit else "0"
+        
+        # Map device code to device
+        predicted_device = self._map_device_code_to_device(device_code)
+        
         return {
             "predicted_device": predicted_device,
             "confidence_scores": {
@@ -225,9 +310,23 @@ class TornadoVMInferenceEngine:
                 "gpu_igpu_fit": gpu_igpu_fit
             },
             "raw_probabilities": [prob_1, prob_2, prob_3],
-            "device_code": device_code
+            "device_code": device_code,
+            "mode": "performance"
         }
-    
+
+    def _map_device_code_to_device(self, device_code: str) -> str:
+        """
+        Map 3-digit device code to device name.
+        """
+        if device_code in ["000", "001"]:
+            return "cpu"
+        elif device_code in ["100", "101", "110"]:
+            return "igpu"
+        elif device_code in ["010", "011", "111"]:
+            return "gpu"
+        else:
+            return "cpu"  # Default fallback
+
     def batch_predict(self, features_list: List[Dict[str, float]]) -> List[Dict[str, any]]:
         """
         Predict hardware for multiple tasks.
@@ -273,49 +372,117 @@ class TornadoVMInferenceEngine:
         Get feature importance scores for the classifiers.
         
         Args:
-            classifier_name: 'all', 'igpu_cpu', 'gpu_cpu', or 'gpu_igpu'
+            classifier_name: 'all', 'igpu_cpu', 'gpu_cpu', 'gpu_igpu', 'java_cpu', 'java_gpu', 'java_igpu'
             
         Returns:
             Dictionary of feature importance scores
         """
         importance_dict = {}
         
-        if classifier_name in ["all", "igpu_cpu"]:
-            importance_dict["igpu_cpu"] = self.classifier_1.feature_importances_.tolist()
-        
-        if classifier_name in ["all", "gpu_cpu"]:
-            importance_dict["gpu_cpu"] = self.classifier_2.feature_importances_.tolist()
+        if self.mode == "power":
+            # Power mode: 6 classifiers
+            if classifier_name in ["all", "igpu_cpu"]:
+                importance_dict["igpu_cpu"] = self.classifier_1.feature_importances_.tolist()
             
-        if classifier_name in ["all", "gpu_igpu"]:
-            importance_dict["gpu_igpu"] = self.classifier_3.feature_importances_.tolist()
+            if classifier_name in ["all", "gpu_cpu"]:
+                importance_dict["gpu_cpu"] = self.classifier_2.feature_importances_.tolist()
+                
+            if classifier_name in ["all", "gpu_igpu"]:
+                importance_dict["gpu_igpu"] = self.classifier_3.feature_importances_.tolist()
+                
+            if classifier_name in ["all", "java_cpu"]:
+                importance_dict["java_cpu"] = self.classifier_4.feature_importances_.tolist()
+                
+            if classifier_name in ["all", "java_gpu"]:
+                importance_dict["java_gpu"] = self.classifier_5.feature_importances_.tolist()
+                
+            if classifier_name in ["all", "java_igpu"]:
+                importance_dict["java_igpu"] = self.classifier_6.feature_importances_.tolist()
+        else:
+            # Performance mode: 3 classifiers
+            if classifier_name in ["all", "igpu_cpu"]:
+                importance_dict["igpu_cpu"] = self.classifier_1.feature_importances_.tolist()
+            
+            if classifier_name in ["all", "gpu_cpu"]:
+                importance_dict["gpu_cpu"] = self.classifier_2.feature_importances_.tolist()
+                
+            if classifier_name in ["all", "gpu_igpu"]:
+                importance_dict["gpu_igpu"] = self.classifier_3.feature_importances_.tolist()
         
         return importance_dict
 
 
 # Example usage
 if __name__ == "__main__":
-    # Initialize the inference engine
-    engine = TornadoVMInferenceEngine()
+    # Test both performance and power modes
+    print("Testing TornadoVM ML Inference Engine")
+    print("=" * 50)
     
-    # Example input features (you need to provide these)
-    example_features = {
-        "threads": 64,
-        "global_memory_loads": 1000,
-        "global_memory_stores": 500,
-        "local_memory_loads": 200,
-        "local_memory_stores": 100,
-        "total_loops": 50,
-        "parallel_loops": 25,
-        "cast_operations": 10,
-        "vector_operations": 5,
-        "total_integer_operations": 2000
-    }
+    # Test performance mode
+    print("\n1. Testing Performance Mode:")
+    try:
+        engine_perf = TornadoVMInferenceEngine(mode="performance")
+        
+        # Example input features
+        example_features = {
+            "threads": 64,
+            "global_memory_loads": 1000,
+            "global_memory_stores": 500,
+            "local_memory_loads": 200,
+            "local_memory_stores": 100,
+            "total_loops": 50,
+            "parallel_loops": 25,
+            "cast_operations": 10,
+            "vector_operations": 5,
+            "total_integer_operations": 2000
+        }
+        
+        result_perf = engine_perf.predict_hardware(example_features)
+        print(f"✅ Performance Mode - Predicted Device: {result_perf['predicted_device'].upper()}")
+        print(f"   Mode: {result_perf['mode']}")
+        print(f"   Device Code: {result_perf['device_code']}")
+        
+    except Exception as e:
+        print(f"❌ Performance Mode Error: {e}")
     
-    # Get prediction
-    result = engine.predict_hardware(example_features)
+    # Test power mode
+    print("\n2. Testing Power Mode:")
+    try:
+        engine_power = TornadoVMInferenceEngine(mode="power")
+        
+        result_power = engine_power.predict_hardware(example_features)
+        print(f"✅ Power Mode - Predicted Device: {result_power['predicted_device'].upper()}")
+        print(f"   Mode: {result_power['mode']}")
+        print(f"   Base Device: {result_power['base_device'].upper()}")
+        print(f"   Java Recommended: {result_power['java_recommended']}")
+        print(f"   Device Code: {result_power['device_code']}")
+        
+    except Exception as e:
+        print(f"❌ Power Mode Error: {e}")
     
-    print("Prediction Result:")
-    print(f"Predicted Device: {result['predicted_device']}")
-    print(f"Confidence Scores: {result['confidence_scores']}")
-    print(f"Classifier Decisions: {result['classifier_decisions']}")
-    print(f"Device Code: {result['device_code']}") 
+    # Test JSON input
+    print("\n3. Testing JSON Input:")
+    try:
+        json_input = {
+            "testWorkload": {
+                "Global Memory Loads": "15",
+                "Global Memory Stores": "6",
+                "Local Memory Loads": "0",
+                "Local Memory Stores": "0",
+                "Total Loops": "2",
+                "Parallel Loops": "1",
+                "Cast Operations": "2",
+                "Vector Operations": "0",
+                "Integer & Float Operations": "57"
+            }
+        }
+        
+        result_json = engine_power.predict_from_json(json_input)
+        print(f"✅ JSON Input - Predicted Device: {result_json['predicted_device'].upper()}")
+        print(f"   Mode: {result_json['mode']}")
+        
+    except Exception as e:
+        print(f"❌ JSON Input Error: {e}")
+    
+    print("\n" + "=" * 50)
+    print("Testing completed!") 

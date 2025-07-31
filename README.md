@@ -1,6 +1,6 @@
 # TornadoVM Feature Extraction and Intelligent Execution
 
-This tool extracts runtime and hardware features from a TornadoVM application and uses them to predict the optimal device for executing a given workload. It then runs the workload on the predicted device and reports performance.
+This tool extracts runtime and hardware features from a TornadoVM application and uses them to predict the optimal device for executing a given workload. It then runs the workload on the predicted device and reports performance. The system supports both **performance optimization** and **power optimization** modes using different ML models.
 
 ## 🚀 Overview
 
@@ -11,6 +11,12 @@ This project performs the following steps:
 3. **Feature Parsing**: Loads extracted features from a JSON format.
 4. **Device Prediction**: Predicts the best device for execution based on feature analysis.
 5. **Workload Execution**: Runs the computation on the predicted optimal device.
+
+### Optimization Modes
+
+- **Performance Mode**: Optimizes for maximum computational speed using 3-classifier architecture
+- **Power Mode**: Optimizes for energy efficiency using 6-classifier architecture (includes Java as device option)
+- **Energy Mode**: Legacy energy optimization mode
 
 ---
 
@@ -41,8 +47,19 @@ Replace /path/to/... with your actual local paths.
 
 To run the feature extraction and execution pipeline on a sample matrix multiplication workload:
 
+### Performance Mode (Default)
 ```bash
-python tornado_inference_runner -e tornado.examples/uk.ac.manchester.tornado.examples.compute.MatrixMultiplication1D -s 1024
+python tornado_inference_runner -e tornado.examples/uk.ac.manchester.tornado.examples.compute.MatrixMultiplication1D -s 1024 --mode performance
+```
+
+### Power Mode
+```bash
+python tornado_inference_runner -e tornado.examples/uk.ac.manchester.tornado.examples.compute.MatrixMultiplication1D -s 1024 --mode power
+```
+
+### Energy Mode
+```bash
+python tornado_inference_runner -e tornado.examples/uk.ac.manchester.tornado.examples.compute.MatrixMultiplication1D -s 1024 --mode energy
 ```
 
 ### Command Line Arguments
@@ -51,10 +68,11 @@ python tornado_inference_runner -e tornado.examples/uk.ac.manchester.tornado.exa
 |----------|-------------|---------|
 | `-e, --example` | TornadoVM example class to run | Required |
 | `-s, --size` | Input size for the computation | Required |
-| `-m, --model-dir` | Directory containing trained models | Current directory |
-| `-f, --features-dir` | Directory where features.json will be saved | `/home/mikepapadim/manchester/TornadoVM/` |
+| `--model-dir` | Directory containing trained models | `./ML` |
+| `-f, --features-dir` | Directory where features.json will be saved | `$TORNADO_SDK` |
 | `-t, --tornado-path` | Path to tornado command | `tornado` |
 | `-v, --verbose` | Enable verbose output | False |
+| `--mode` | Optimization mode: `performance`, `power`, or `energy` | `performance` |
 
 ## Output Summary
 
